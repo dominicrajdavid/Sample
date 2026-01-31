@@ -7,34 +7,29 @@ from groq import Groq
 # --- INITIAL CONFIGURATION ---
 st.set_page_config(page_title="Gen AI Intelligence Studio", layout="wide", initial_sidebar_state="expanded")
 
-# Initialize Session States for ROI Tracker
+# Initialize Session States
 if 'total_hours_saved' not in st.session_state:
     st.session_state.total_hours_saved = 0.0
 if 'tasks_completed' not in st.session_state:
     st.session_state.tasks_completed = 0
 
-# --- STYLING (Rich UI/UX) ---
+# --- RICH UI STYLING ---
 st.markdown("""
     <style>
     .main { background-color: #f8fafc; }
     .stButton>button {
-        width: 100%; border-radius: 8px; height: 3.5em;
+        width: 100%; border-radius: 8px; height: 3em;
         background-color: #0f172a; color: white; font-weight: bold;
-        transition: all 0.3s; border: none;
     }
-    .stButton>button:hover {
-        background-color: #2563eb; transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-    }
-    [data-testid="stMetricValue"] { font-size: 28px; color: #2563eb; }
+    .stButton>button:hover { background-color: #2563eb; border: none; }
     .agent-card {
         border-radius: 12px; border: 1px solid #e2e8f0;
-        padding: 20px; background: white; margin-bottom: 20px;
+        padding: 20px; background: white; margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CORE LOGIC ---
+# --- CORE UTILITIES ---
 def call_llm(system_prompt, user_content, api_key):
     try:
         client = Groq(api_key=api_key)
@@ -45,92 +40,78 @@ def call_llm(system_prompt, user_content, api_key):
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return f"Error: Please verify your API Key. Details: {str(e)}"
+        return f"Error: {str(e)}"
 
-def update_metrics(hours):
-    st.session_state.total_hours_saved += hours
-    st.session_state.tasks_completed += 1
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Studio_Report')
+    return output.getvalue()
 
-# --- SIDEBAR (ROI & SETTINGS) ---
+# --- SIDEBAR (ROI TRACKER) ---
 with st.sidebar:
-    st.title("🛡️ Studio Control")
-    api_key = st.text_input("Enter Groq API Key", type="password", help="Get yours at console.groq.com")
+    st.title("🛡️ Admin Console")
+    api_key = st.text_input("Groq API Key", type="password")
     st.divider()
-    
-    st.subheader("📈 Project Impact")
-    st.metric("Total Hours Reclaimed", f"{st.session_state.total_hours_saved} hrs")
-    st.metric("Manual Tasks Offloaded", st.session_state.tasks_completed)
-    # Average Senior QA Rate: $65/hr
-    savings = int(st.session_state.total_hours_saved * 65)
-    st.metric("Estimated Cost Savings", f"${savings:,}")
-    
-    if st.button("Reset Session Metrics"):
+    st.metric("Total Hours Saved", f"{st.session_state.total_hours_saved} hrs")
+    st.metric("Cost Savings", f"${int(st.session_state.total_hours_saved * 65)}")
+    if st.button("Reset Metrics"):
         st.session_state.total_hours_saved = 0.0
-        st.session_state.tasks_completed = 0
         st.rerun()
 
 # --- MAIN DASHBOARD ---
-st.title("⚡ Gen AI Intelligence Studio")
-st.markdown("##### *Unified Quality Intelligence Orchestration*")
+st.title("🚀 Gen AI Intelligence Studio")
+st.caption("Strategic Automation for PMs & Senior QA Leads")
 
-# Agent Definitions with "Manual Effort" weights
 agents = [
-    {"name": "Requirement Analysis", "icon": "📝", "weight": 2.0, "desc": "PRD to Gherkin & User Stories."},
-    {"name": "Test Case Gen", "icon": "📊", "weight": 2.5, "desc": "Structured suites with Excel export."},
-    {"name": "Selenium to Playwright", "icon": "🔄", "weight": 4.5, "desc": "Legacy script migration agent."},
-    {"name": "Root Cause Analysis", "icon": "🕵️", "weight": 1.5, "desc": "Log failure & defect diagnosis."},
-    {"name": "Impact Analysis", "icon": "🎯", "weight": 3.0, "desc": "Regression scope optimizer."},
-    {"name": "Unit Test Creator", "icon": "💻", "weight": 1.5, "desc": "Auto-generate PyTest/Jest suites."}
+    {"name": "Requirement Analysis", "icon": "📝", "hr": 2.0, "p": "Analyze requirements into a table with columns: ID, User Story, Gherkin Scenario."},
+    {"name": "Test Case Gen", "icon": "📊", "hr": 2.5, "p": "Generate test cases as a table: ID, Step, Expected Result, Priority."},
+    {"name": "Root Cause Analysis", "icon": "🕵️", "hr": 1.5, "p": "Analyze logs and return a table: Error, Category, Root Cause, Suggested Fix."},
+    {"name": "Impact Analysis", "icon": "🎯", "hr": 3.0, "p": "Compare versions and return a table: Change, Impacted Module, Risk Level, Test Action."}
 ]
 
-# Display Grid
-cols = st.columns(3)
+cols = st.columns(len(agents))
 for i, agent in enumerate(agents):
-    with cols[i % 3]:
-        st.markdown(f"""<div class='agent-card'><h3>{agent['icon']} {agent['name']}</h3><p>{agent['desc']}</p></div>""", unsafe_allow_html=True)
-        if st.button(f"Activate {agent['name']}", key=f"btn_{i}"):
+    with cols[i]:
+        st.markdown(f"<div class='agent-card'><h4>{agent['icon']} {agent['name']}</h4></div>", unsafe_allow_html=True)
+        if st.button("Select", key=f"sel_{i}"):
             st.session_state.active_agent = agent
-            st.rerun()
 
 st.divider()
 
-# --- EXECUTION ENGINE ---
+# --- DYNAMIC WORKING AREA ---
 if 'active_agent' in st.session_state:
-    agent = st.session_state.active_agent
-    st.header(f"{agent['icon']} {agent['name']} Workspace")
+    active = st.session_state.active_agent
+    st.subheader(f"Working Area: {active['name']}")
     
-    if not api_key:
-        st.error("🔑 API Key required in the sidebar to run agents.")
-    else:
-        # Dynamic Input Fields based on Agent
-        if agent['name'] == "Requirement Analysis":
-            u_input = st.text_area("Paste Requirements/PRD:", height=250)
-            sys_p = "Convert requirements into User Stories and Gherkin scenarios."
-        elif agent['name'] == "Test Case Gen":
-            u_input = st.text_area("Paste Scenarios:")
-            sys_p = "Generate a structured test case table in CSV format."
-        elif agent['name'] == "Selenium to Playwright":
-            u_input = st.text_area("Paste Selenium Code:", height=250)
-            sys_p = "Refactor Selenium code to Playwright Async Python. Return only code."
-        elif agent['name'] == "Root Cause Analysis":
-            u_input = st.text_area("Paste Stack Trace / Logs:")
-            sys_p = "Identify if the failure is Code, Data, or Environment. Provide a fix."
-        elif agent['name'] == "Impact Analysis":
-            v1 = st.text_input("Original Requirement:")
-            v2 = st.text_input("New Requirement:")
-            u_input = f"Old: {v1}\nNew: {v2}"
-            sys_p = "Analyze changes and suggest the minimum regression test scope."
-        elif agent['name'] == "Unit Test Creator":
-            u_input = st.text_area("Paste Function/Code:")
-            sys_p = "Write comprehensive unit tests using PyTest."
-
-        if st.button(f"🚀 Execute {agent['name']}"):
-            with st.spinner("Agent is processing..."):
-                start_time = time.time()
-                result = call_llm(sys_p, u_input, api_key)
-                duration = time.time() - start_time
+    user_input = st.text_area("Paste your data here:", height=200)
+    
+    if st.button(f"🚀 Execute {active['name']}"):
+        if not api_key:
+            st.error("Please enter an API key in the sidebar.")
+        else:
+            with st.spinner("Processing..."):
+                # Force LLM to output CSV format for parsing
+                full_prompt = f"{active['p']} Important: Return ONLY a valid CSV-formatted string with headers. No conversation."
+                raw_csv = call_llm(full_prompt, user_input, api_key)
                 
-                st.subheader("Agent Output")
-                st.markdown(result)
-                update_metrics(agent['weight'])
-                st.toast(f"Execution successful! Saved ~{agent['weight']} hours.", icon="✅")
+                try:
+                    df = pd.read_csv(io.StringIO(raw_csv))
+                    
+                    st.success(f"Analysis Complete! Saved ~{active['hr']} hours.")
+                    st.session_state.total_hours_saved += active['hr']
+                    
+                    # Display table with native Copy-to-Clipboard (Ctrl+C)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    
+                    # Download Excel Option
+                    excel_file = to_excel(df)
+                    st.download_button(
+                        label="📥 Download Results as Excel",
+                        data=excel_file,
+                        file_name=f"{active['name'].replace(' ', '_')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                except:
+                    st.error("Format error. Raw output shown below:")
+                    st.markdown(raw_csv)
